@@ -1,4 +1,7 @@
-import { FileDown, MoreHorizontal, Plus, Search } from 'lucide-react'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { FileDown, Filter, MoreHorizontal, Plus, Search } from 'lucide-react'
+import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Header } from './components/Header'
 import { Pagination } from './components/Pagination'
 import { Tabs } from './components/Tabs'
@@ -6,7 +9,49 @@ import { Button } from './components/ui/button'
 import { Control, Input } from './components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './components/ui/table'
 
+export interface TagResponse {
+  first: number
+  prev: number | null
+  next: number
+  last: number
+  pages: number
+  items: number
+  data: Tag[]
+}
+
+export interface Tag {
+  title: string
+  amountOfVideos: number
+  id: string
+}
+
 function App() {
+  const [searchParams, setsearchParams] = useSearchParams()
+  const urlFilter = searchParams.get('filter') ?? ''
+  const [filter, setfilter] = useState(urlFilter)
+
+  const page = searchParams.get('page') ? Number(searchParams.get('page')) : 1
+
+  const { data: tagsResponse, isLoading } = useQuery<TagResponse>({
+    queryKey: ['get-tags', urlFilter, page],
+    queryFn: async () => {
+      const res = await fetch(`http://localhost:3333/tags?_page=${page}&_per_page=10&title=${urlFilter}`)
+      const data = await res.json()
+      return data
+    },
+    placeholderData: keepPreviousData
+  })
+
+  function handleFilter() {
+    setsearchParams(params => {
+      params.set('page', '1')
+      params.set('filter', filter)
+      return params
+    })
+  }
+
+  if (isLoading) return null
+
   return (
     <div className="py-10 space-y-8">
       <div>
@@ -23,12 +68,22 @@ function App() {
         </div>
 
         <div className="flex items-center justify-between">
-          <Input variant='filter'>
-            <Search className='size-3'/>
-            <Control placeholder='Search tags...'/>
-          </Input>
+          <div className="flex items-center gap-3">
+            <Input variant='filter'>
+              <Search className='size-3'/>
+              <Control
+                placeholder='Search tags...'
+                onChange={e => setfilter(e.target.value)}
+                value={filter}
+              />
+            </Input>
+            <Button type='submit' onClick={handleFilter}>
+              <Filter className='size-3'/>
+              Filter
+            </Button>
+          </div>
           <Button>
-            <FileDown className='size-3' />
+            <FileDown className='size-3'/>
             Export
           </Button>
         </div>
@@ -44,18 +99,18 @@ function App() {
           </TableHeader>
           <TableBody>
             {
-              Array.from({ length: 10 }).map((value, i) => {
+              tagsResponse?.data.map((tag) => {
                 return (
-                  <TableRow key={i}>
+                  <TableRow key={tag.id}>
                     <TableCell></TableCell>
                     <TableCell>
                       <div className="flex flex-col">
-                        <span className='font-medium'>React</span>
+                        <span className='font-medium'>{tag.title}</span>
                         <span className='text-xs text-zinc-500'>e8cd6449-e813-4a42-95eb-c75788873597</span>
                       </div>
                     </TableCell>
                     <TableCell className='text-zinc-300'>
-                      22 video(s)
+                      {tag.amountOfVideos} video(s)
                     </TableCell>
                     <TableCell className='text-right'>
                       <Button size='icon'>
@@ -68,7 +123,15 @@ function App() {
             }
           </TableBody>
         </Table>
-        <Pagination pages={0} items={0} page={0} />
+        {
+          tagsResponse &&	(
+            <Pagination
+              pages={tagsResponse.pages}
+              items={tagsResponse.items}
+              page={page}
+            />
+          )
+        }
       </main>
     </div>
   )
